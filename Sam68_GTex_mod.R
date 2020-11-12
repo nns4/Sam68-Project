@@ -47,6 +47,3 @@ df$P.value <- pvalues
 # this will contain correlation and p-value for each gene with KHDRBS2
 colnames(df) <- c("Gene","Cor","pvalue_GTex")
 df$Gene<-sub("\\.\\d+$", "", df$Gene)
-
-df<-df %>% 
-  distinct(Gene, .keep_all = T)
