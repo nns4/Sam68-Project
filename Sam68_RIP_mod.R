@@ -17,9 +17,4 @@ p_value <- pnorm(S_sam68_RIP$Sam68,mean = S_sam68_RIP$control_mean,sd = S_sam68_
 S_sam68_RIP["p_value_Sam68_RIP"] <- p_value
 
 
-# subset the gene name
-S_sam68_RIP$Gene<-sub("\\.\\d+$", "", S_sam68_RIP$Gene)
 
-# identifiying unique GeneID only
-S_sam68_RIP<-S_sam68_RIP %>% 
-  distinct(Gene, .keep_all = T)
