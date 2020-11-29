@@ -1,74 +1,58 @@
 #Reference material
-#"https://ucdavis-bioinformatics-training.github.io/2018-June-RNA-Seq-Workshop/thursday/DE.html"
-#BiocManager::install("limma")
+
+#"http://www.nathalievialaneix.eu/doc/html/solution_edgeR-tomato-withcode.html"
 library(limma)
 library(edgeR)
 count_data <- read.csv("GSE104856_counts.csv", row.names = 1)
 head(count_data)
-
-# Creating DGElist object from count matrix
-DGE_object<-DGEList(counts = count_data)
-DGE_object<-calcNormFactors(DGE_object)
-dim(DGE_object)
-
-# Filter low-expressed genes from count matrix 
-cutoff <- 1
-drop <- which(apply(cpm(DGE_object), 1, max) < cutoff)
-DGE_norm <- DGE_object[-drop,] 
-dim(DGE_norm) # number of genes left
-DGE_norm$counts
-
 # getting sample name into variable 
 snames <- colnames(count_data)
-
-
 group<-as.factor(substr(snames,start = 12,stop = 13))
 
-# Multidimensional scaling (MDS) is a means of visualizing the level of similarity of individual cases of a dataset.
-plotMDS(DGE_norm, col = as.numeric(group))
+
+      
+y <- DGEList(count_data, group=group)
+design <- model.matrix(~0+group)
+colnames(design) <- levels(group)
+design
+
+AveLogCPM <- aveLogCPM(y)
+hist(AveLogCPM)
+y <- calcNormFactors(y)
+y$samples
+
+pch <- c(6,7,9,11)
+colors <- rep(c("darkgreen", "red"), 2)
+
+# MDS plot
+plotMDS(y, col=colors[group], pch=pch[group])
+legend("topleft", legend=levels(group), pch=pch, col=colors, ncol=2)
+
+plotMD(y, column=1)
+abline(h=0, col="red", lty=2, lwd=2)
+
+y <- estimateDisp(y, design)
+
+    
+fit <- glmQLFit(y, design)
+head(fit$coefficients)
 
 
-# design a matrix 
-#we can think of ~0+x or equally ~x+0 as an equation of the form: y=ax+b. 
-#By adding 0 we are forcing b to be zero, that means that we are looking for a line passing the origin (no intercept).
-#If we indicated a model like ~x+1 or just ~x, there fitted equation could possibily contain a non-zero term b.
-#Equally we may restrict b by a formula ~x-1 or ~-1+x that both mean: no intercept 
-#(the same way we exclude a row or column in R by negative index).
+KO.Co <- makeContrasts(KO-Co, levels=design)
+res <- glmQLFTest(fit, contrast=KO.Co)
 
-model_matrix <- model.matrix(~0 + group)
-model <- voom(DGE_norm, model_matrix, plot = T)
+resultTOP <- topTags(res, n=nrow(res$table))
+head(resultTOP)
+  
+is.de <- decideTestsDGE(res)
+summary(is.de)
 
-#What is voom doing?
-
-#Counts are transformed to log2 counts per million reads (CPM),
-#where oper million reads is defined based on the normalization factors we calculated earlier
-#A linear model is fitted to the log2 CPM for each gene, and the residuals are calculated
-#A smoothed curve is fitted to the sqrt(residual standard deviation) by average expression (see red line in plot above)
-#The smoothed curve is used to obtain weights for each gene and sample that are passed into limma along with the log2 CPMs.
-
-# fitting model 
-#lmFit fits a linear model using weighted least squares for each gene:
-fit <- lmFit(model, model_matrix)
-head(coef(fit))
-
-# create groups to comapre for Differential expression
-contr <- makeContrasts(KO_Co=groupKO - groupCo, levels = colnames(coef(fit)))
-contr
-
-tmp <- contrasts.fit(fit, contr)
-
-tmp <- eBayes(tmp)
-
-# Summarize results
-results <- decideTests(tmp)
-summary(results)
+sigDownReg <- resultTOP$table[resultTOP$table$FDR<0.01,]
+sigDownReg <- sigDownReg[order(sigDownReg$logFC),]
+head(sigDownReg)
+sigUpReg <- sigDownReg[order(sigDownReg$logFC, decreasing=TRUE),]
+head(sigUpReg)
 
 
-# sort the gene according to p-values
-top.table <- topTable(tmp, sort.by = "P")
-head(top.table, 20)
-
-hist(top.table[,"P.Value"])
-
-length(which(top.table$adj.P.Val < 0.05))
-write.csv(top.table, file = "Sam68-KO_new.csv")
+plotMD(res, status=is.de, values=c(1,-1), col=c("red","blue"),
+       legend="topright")
