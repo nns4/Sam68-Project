@@ -1,22 +1,49 @@
-library(EnvStats)
+library(magrittr)
 library(dplyr)
+library(EnvStats)
+options(scipen = 999)
+library(clusterProfiler)
+library(enrichplot)
+# we use ggplot2 to add x axis labels (ex: ridgeplot)
+library(ggplot2)
+organism = "org.Hs.eg.db"
+library(organism, character.only = TRUE)
 
-#merge p-value of Sam68_RIP data with Sam68_KO data.
-all_RIP.KO_data <- merge(S_sam68_RIP,Sam68_KO,by = "Gene",all.x = TRUE,all.y = TRUE)
-#p-vlaues of all databases combined together 
-all_data <- merge(all_RIP.KO_data,df,by = "Gene",all.x = TRUE,all.y = TRUE)
-
-
-#data sorted by Gene,Name and p-values of each database.
-all_sort_data <- select(all_data,c("Gene","Name","p_value_Sam68_RIP","pvalue_GTex","Pvalue_Sam_KO"))
-write.csv(all_sort_data,"geo_pvalue.csv",row.names = FALSE)
-
+# reading in data from deseq2
 geo_pvalue <- read.csv("geo_pvalue.csv")
 
-#geometric mean and geometric fdr calculated and written in csv file.
+
 geo_pvalue["geo_mean_pvalue"]<-apply(geo_pvalue[,3:5], 1, geoMean)
-geo_pvalue["geo_mean_fdr"] <- p.adjust(geo_pvalue$geo_mean_pvalue)
-write.csv(geo_pvalue, file = "Sam68_GeometricValues.csv")
+geo_pvalue["geo_mean_p.adjust"] <- p.adjust(geo_pvalue$geo_mean_pvalue)
 
+# histogram plot 
+hist(geo_pvalue$geo_mean_pvalue,col="red",main = "Hypergeometric Plot",xlab = "Pvalue")
 
+## Create background dataset for hypergeometric testing using all genes tested for significance in the results                 
+allOE_genes <- as.character(geo_pvalue$Gene)
 
+## Extract significant results
+sigOE <- filter(geo_pvalue,geo_mean_p.adjust < 0.05)
+
+sigOE_genes <- as.character(sigOE$Gene)
+
+ego <- enrichGO(gene = sigOE_genes, 
+                universe = allOE_genes,
+                keyType = "ENSEMBL",
+                OrgDb = org.Hs.eg.db, 
+                ont = "BP", 
+                pAdjustMethod = "BH", 
+                qvalueCutoff = 0.05, 
+                readable = TRUE)
+#different plots for enrichment analysis
+library(ggupset)
+upsetplot(ego,title = "Upset Plot")
+barplot(ego, 
+        drop = TRUE, 
+        showCategory = 10, 
+        title = "GO Biological Pathways")
+
+dotplot(ego,showCategory = 10,title = "Dot Plot")
+emapplot(ego,showCategory = 30,title = "Enrichment map")
+goplot(ego,title = "Enriched GO induced graph")
+ridgeplot(ego)
